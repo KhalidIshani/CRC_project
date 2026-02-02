@@ -1,0 +1,401 @@
+---
+title: "TCGAsurvial"
+output: html_document
+date: "2025-12-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r cars}
+library(readxl)
+library(dplyr)
+library(survival)
+library(survminer)
+library(ggplot2)
+
+data <- read_excel("~/Desktop/survival/all_labeling_clin_data.xlsx")
+```
+
+
+
+```{r pressure, echo=FALSE}
+names(data)    
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    os_status_num  = as.numeric(sub("^([01]).*", "\\1", OS_STATUS)),
+    pfs_status_num = as.numeric(sub("^([01]).*", "\\1", PFS_STATUS))
+  )
+table(data$OS_STATUS, data$os_status_num, useNA = "ifany")
+table(data$PFS_STATUS, data$pfs_status_num, useNA = "ifany")
+
+```
+
+
+
+```{r pressure, echo=FALSE}
+str(data$OS_MONTHS)
+str(data$PFS_MONTHS)
+
+head(data$OS_MONTHS)
+head(data$PFS_MONTHS)
+
+```
+
+
+
+```{r pressure, echo=FALSE}
+data <- data %>%
+  mutate(
+    OS_MONTHS  = as.numeric(OS_MONTHS),
+    PFS_MONTHS = as.numeric(PFS_MONTHS)
+  )
+
+```
+
+
+
+
+
+```{r pressure, echo=FALSE}
+library(ggplot2)
+
+data <- data %>%
+  mutate(
+    diff_os_pfs = OS_MONTHS - PFS_MONTHS,
+    group_var   = factor(Predicted_Class)  
+  )
+
+table(data$group_var, useNA = "ifany")
+
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+
+
+d_death <- data %>%
+  filter(data$os_status_num == 1,
+         !is.na(diff_os_pfs),
+         !is.na(group_var))
+
+d_death %>%
+  group_by(group_var) %>%
+  summarise(
+    n      = n(),
+    median = round(median(diff_os_pfs, na.rm = TRUE), 3),
+    q1     = round(quantile(diff_os_pfs, 0.25, na.rm = TRUE), 3),
+    q3     = round(quantile(diff_os_pfs, 0.75, na.rm = TRUE), 3)
+  )
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+
+kruskal.test(diff_os_pfs ~ group_var, data = d_death)
+
+
+ggplot(d_death, aes(x = group_var, y = diff_os_pfs)) +
+  geom_boxplot() +
+  labs(
+    x = "Group (AK / AFPS / AKP)",
+    y = "OS_MONTHS - PFS_MONTHS"
+  )
+```
+
+
+
+```{r pressure, echo=FALSE}
+d_death %>%
+  select(OS_MONTHS, PFS_MONTHS, diff_os_pfs, group_var) %>%
+  head(10)
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+library(survival)
+library(survminer)
+
+fit_os <- survfit(
+  Surv(OS_MONTHS, os_status_num) ~ group_var,
+  data = data
+)
+
+ggsurvplot(
+  fit_os,
+  data         = data,
+  pval         = TRUE,        
+  risk.table   = TRUE,
+  legend.title = "Group",
+  xlab = "Overall survival (months)",
+  ylab = "Survival probability"
+)
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+fit_pfs <- survfit(
+  Surv(PFS_MONTHS, pfs_status_num) ~ group_var,
+  data = data
+)
+
+ggsurvplot(
+  fit_pfs,
+  data         = data,
+  pval         = TRUE,
+  risk.table   = TRUE,
+  legend.title = "Group",
+  xlab = "Progression-free survival (months)",
+  ylab = "Progression-free survival probability"
+)
+
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+
+head(data$AJCC_PATHOLOGIC_TUMOR_STAGE)
+
+sort(unique(data$AJCC_PATHOLOGIC_TUMOR_STAGE))
+
+table(data$AJCC_PATHOLOGIC_TUMOR_STAGE, useNA = "ifany")
+
+prop.table(table(data$AJCC_PATHOLOGIC_TUMOR_STAGE, useNA = "ifany"))
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+
+head(data$PATH_T_STAGE)
+sort(unique(data$PATH_T_STAGE))
+table(data$PATH_T_STAGE, useNA = "ifany")
+
+
+head(data$PATH_N_STAGE)
+sort(unique(data$PATH_N_STAGE))
+table(data$PATH_N_STAGE, useNA = "ifany")
+
+
+head(data$PATH_M_STAGE)
+sort(unique(data$PATH_M_STAGE))
+table(data$PATH_M_STAGE, useNA = "ifany")
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+recode_T <- function(x) {
+  x_chr <- toupper(trimws(as.character(x)))
+  dplyr::case_when(
+    x_chr %in% c("TIS")               ~ 0,
+    x_chr %in% c("T1")                ~ 1,
+    x_chr %in% c("T2")                ~ 2,
+    x_chr %in% c("T3")                ~ 3,
+    x_chr %in% c("T4", "T4A", "T4B")  ~ 4,
+    TRUE                              ~ NA_real_
+  )
+}
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+recode_N <- function(x) {
+  x_chr <- toupper(trimws(as.character(x)))
+  dplyr::case_when(
+    x_chr %in% c("N0")                          ~ 0,
+    x_chr %in% c("N1", "N1A", "N1B", "N1C")     ~ 1,
+    x_chr %in% c("N2", "N2A", "N2B")            ~ 2,
+    TRUE                                        ~ NA_real_
+  )
+}
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+recode_M <- function(x) {
+  x_chr <- toupper(trimws(as.character(x)))
+  dplyr::case_when(
+    x_chr %in% c("M0")                      ~ 0,
+    x_chr %in% c("M1", "M1A", "M1B")        ~ 1,
+    x_chr %in% c("MX")                      ~ NA_real_,
+    TRUE                                    ~ NA_real_
+  )
+}
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+recode_ajcc_stage <- function(x) {
+  x_chr <- toupper(trimws(as.character(x)))
+  dplyr::case_when(
+    x_chr %in% c("STAGE I", "STAGE IA") ~ 1,
+    x_chr %in% c("STAGE II", "STAGE IIA", "STAGE IIB", "STAGE IIC") ~ 2,
+    x_chr %in% c("STAGE III", "STAGE IIIA", "STAGE IIIB", "STAGE IIIC") ~ 3,
+    x_chr %in% c("STAGE IV", "STAGE IVA", "STAGE IVB") ~ 4,
+    TRUE ~ NA_real_
+  )
+}
+
+data <- data %>%
+  mutate(
+    AJCC_STAGE_NUM = recode_ajcc_stage(AJCC_PATHOLOGIC_TUMOR_STAGE),
+    PATH_T_NUM     = recode_T(PATH_T_STAGE),
+    PATH_N_NUM     = recode_N(PATH_N_STAGE),
+    PATH_M_NUM     = recode_M(PATH_M_STAGE)
+  )
+
+
+table(data$AJCC_STAGE_NUM, useNA = "ifany")
+table(data$PATH_T_NUM,     useNA = "ifany")
+table(data$PATH_N_NUM,     useNA = "ifany")
+table(data$PATH_M_NUM,     useNA = "ifany")
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+## OS
+cox_os_full <- coxph(
+  Surv(OS_MONTHS, os_status_num) ~ group_var +
+    AJCC_STAGE_NUM + PATH_T_NUM + PATH_N_NUM + PATH_M_NUM,
+  data = data
+)
+
+## PFS
+cox_pfs_full <- coxph(
+  Surv(PFS_MONTHS, pfs_status_num) ~ group_var +
+    AJCC_STAGE_NUM + PATH_T_NUM + PATH_N_NUM + PATH_M_NUM,
+  data = data
+)
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+cox_os_full
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+cox_pfs_full
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+data3 <- data %>%
+  filter(group_var %in% c("AK", "AKP", "AKPS")) %>%
+  droplevels()  
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+## OS Cox
+cox_os_3 <- coxph(
+  Surv(OS_MONTHS, os_status_num) ~ group_var +
+    AJCC_STAGE_NUM + PATH_T_NUM + PATH_N_NUM + PATH_M_NUM,
+  data = data3
+)
+summary(cox_os_3)
+
+
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+## PFS Cox
+cox_pfs_3 <- coxph(
+  Surv(PFS_MONTHS, pfs_status_num) ~ group_var +
+    AJCC_STAGE_NUM + PATH_T_NUM + PATH_N_NUM + PATH_M_NUM,
+  data = data3
+)
+summary(cox_pfs_3)
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
+
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+
